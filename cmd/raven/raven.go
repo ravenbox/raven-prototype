@@ -1,4 +1,4 @@
-package raven
+package main
 
 import (
 	"github.com/ravenbox/raven-prototype/pkg/memstore"
