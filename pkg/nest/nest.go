@@ -1,6 +1,8 @@
 package nest
 
 import (
+	"fmt"
+	"log"
 	"strings"
 	"sync"
 
@@ -16,6 +18,14 @@ type Nest struct {
 	subscribes    map[string]map[string]chan *rtp.Packet
 
 	mu sync.RWMutex
+}
+
+func NewNest() *Nest {
+	return &Nest{
+		peers:         make(map[string]*webrtc.PeerConnection),
+		inboundTracks: make(map[string]struct{}),
+		subscribes:    make(map[string]map[string]chan *rtp.Packet),
+	}
 }
 
 func (n *Nest) RegisterPeer(id string, peer *webrtc.PeerConnection) {
@@ -54,9 +64,16 @@ func (n *Nest) SubscribeToTrack(peerID, trackID string) error {
 	}()
 
 	ch := make(chan *rtp.Packet, 32)
+	if _, exists := n.subscribes[trackID]; !exists {
+		n.subscribes[trackID] = make(map[string]chan *rtp.Packet)
+	}
+	if _, exists := n.subscribes[trackID][peerID]; !exists {
+		n.subscribes[trackID][peerID] = make(chan *rtp.Packet)
+	}
 	n.subscribes[trackID][peerID] = ch
 	go func() {
 		for packet := range ch {
+			log.Println("Writing", packet)
 			if err := outboundTrack.WriteRTP(packet); err != nil {
 				//TODO: wut?
 				panic(err)
@@ -80,9 +97,11 @@ func (n *Nest) Tracks() []string {
 }
 
 func (n *Nest) onNewRemoteTrack(peerID string, tr *webrtc.TrackRemote, _ *webrtc.RTPReceiver) {
+	fmt.Printf("Track has started, of type %d: %s \n", tr.PayloadType(), tr.Codec().MimeType)
 	trackID := strings.Join([]string{
-		peerID, tr.StreamID(), tr.ID(),
+		peerID, tr.Codec().MimeType,
 	}, "#")
+	fmt.Println("Remote track id:", trackID)
 	n.mu.Lock()
 	n.inboundTracks[trackID] = struct{}{}
 	n.mu.Unlock()
@@ -92,6 +111,7 @@ func (n *Nest) onNewRemoteTrack(peerID string, tr *webrtc.TrackRemote, _ *webrtc
 			//TODO:
 			panic(err)
 		}
+		log.Println("Readed", packet)
 
 		for _, ch := range n.subscribes[trackID] {
 			select {
