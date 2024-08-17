@@ -12,6 +12,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/ravenbox/raven-prototype/pkg/nest"
 
@@ -67,7 +68,7 @@ func main() {
 		}()
 
 		offer := webrtc.SessionDescription{}
-		decode(readUntilNewline(), &offer)
+		getSdpFromFile(i, &offer)
 
 		err = peerConnection.SetRemoteDescription(offer)
 		if err != nil {
@@ -84,7 +85,7 @@ func main() {
 			panic(err)
 		}
 		<-gatherComplete
-		fmt.Println(encode(peerConnection.LocalDescription()))
+		fmt.Printf("SDP for connection %d:\n%s\n", i, encode(peerConnection.LocalDescription()))
 		ary[i] = peerConnection
 	}
 
@@ -131,4 +132,13 @@ func decode(in string, obj *webrtc.SessionDescription) {
 	if err = json.Unmarshal(b, obj); err != nil {
 		panic(err)
 	}
+}
+
+func getSdpFromFile(connectionIndex int, obj *webrtc.SessionDescription) {
+	dat, err := os.ReadFile(fmt.Sprintf("sdp-%d.txt", connectionIndex))
+	if err != nil {
+		panic(err)
+	}
+
+	decode(string(dat), obj)
 }

@@ -2,7 +2,6 @@ package nest
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 
@@ -73,7 +72,6 @@ func (n *Nest) SubscribeToTrack(peerID, trackID string) error {
 	n.subscribes[trackID][peerID] = ch
 	go func() {
 		for packet := range ch {
-			log.Println("Writing", packet)
 			if err := outboundTrack.WriteRTP(packet); err != nil {
 				//TODO: wut?
 				panic(err)
@@ -108,10 +106,9 @@ func (n *Nest) onNewRemoteTrack(peerID string, tr *webrtc.TrackRemote, _ *webrtc
 	for {
 		packet, _, err := tr.ReadRTP()
 		if err != nil {
-			//TODO:
+			//TODO: handle ridiculous error
 			panic(err)
 		}
-		log.Println("Readed", packet)
 
 		for _, ch := range n.subscribes[trackID] {
 			select {
