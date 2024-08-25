@@ -133,7 +133,9 @@ func (n *Negotiator) onMessage(s SignalBody) {
 			offerCollision bool
 		)
 		n.mu.Tx(func() {
-			readyForOffer = !n.makingOffer && (n.PeerConn.SignalingState() == webrtc.SignalingStateStable || n.isSettingRemoteAnswerPending)
+			readyForOffer = !n.makingOffer &&
+				(n.PeerConn.SignalingState() == webrtc.SignalingStateStable ||
+					n.isSettingRemoteAnswerPending)
 			offerCollision = description.Type == webrtc.SDPTypeOffer && !readyForOffer
 		})
 		if ignore := !n.Polite && offerCollision; ignore {
