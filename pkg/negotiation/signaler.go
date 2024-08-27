@@ -71,7 +71,7 @@ type DummySignalerInterceptor struct {
 	// BeforeSend blocks Send method. Use BeforeRecv for
 	// simulating network latency and similar stuff.
 	BeforeSend func(*SignalBody) error
-	// BeforeRecv intrupts reading loop. It can be used to
+	// BeforeRecv interrupts reading loop. It can be used to
 	// simulate network latency and similar stuff.
 	BeforeRecv func(*SignalBody) error
 }
