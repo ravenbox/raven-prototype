@@ -43,23 +43,20 @@ func FailGroup() *failGroup {
 
 // Wait returns a channel which returns true when all Checks done successfully.
 func (fg *failGroup) Wait() <-chan bool {
-	wait := make(chan struct{})
-	go func() {
-		fg.wg.Wait()
-		close(wait)
-	}()
 	success := make(chan bool)
 	go func() {
+		fg.wg.Wait()
 		select {
 		case <-fg.failed:
 			success <- false
-		case <-wait:
+		default:
 			success <- true
 		}
 	}()
 	return success
 }
 
+// Check provides a fail and a done callback for task goroutine.
 func (fg *failGroup) Check(fn func(fail, done func())) {
 	fg.wg.Add(1)
 	ch := make(chan struct{})
@@ -67,14 +64,27 @@ func (fg *failGroup) Check(fn func(fail, done func())) {
 		ch <- struct{}{}
 	}
 	done := func() {
-		fg.wg.Done()
 		close(ch)
 	}
 	go func() {
+		defer fg.wg.Done()
 		for range ch {
 			fg.failNow()
 			return
 		}
 	}()
 	fn(fail, done)
+}
+
+// AsyncCheck only provides fail callback and it does not block Wait.
+func (fg *failGroup) AsyncCheck(fn func(fail func())) {
+	ch := make(chan struct{})
+	fail := func() {
+		close(ch)
+	}
+	go func() {
+		<-ch
+		fg.failNow()
+	}()
+	fn(fail)
 }

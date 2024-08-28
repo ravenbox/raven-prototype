@@ -269,15 +269,18 @@ func Test_MultipleDataTracksNegotiation(t *testing.T) {
 		tt[k] = v
 	}
 
-	neg2.PeerConn.OnDataChannel(func(dc *webrtc.DataChannel) {
-		// Register the OnMessage to handle incoming messages
-		dc.OnMessage(func(dcMsg webrtc.DataChannelMessage) {
-			id := dc.ID()
-			if id == nil {
-				t.Log("received message on data channel with empty id. ignored.")
-				return
-			}
-			tt[*id].recvCh <- dcMsg.Data
+	fg.AsyncCheck(func(fail func()) {
+		neg2.PeerConn.OnDataChannel(func(dc *webrtc.DataChannel) {
+			// Register the OnMessage to handle incoming messages
+			dc.OnMessage(func(dcMsg webrtc.DataChannelMessage) {
+				id := dc.ID()
+				if id == nil {
+					t.Log("received message on data channel with empty id.")
+					fail()
+				} else {
+					tt[*id].recvCh <- dcMsg.Data
+				}
+			})
 		})
 	})
 
