@@ -19,11 +19,13 @@ func Test_BasicNegotiation(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to create webrtc PeerConnection:", err)
 	}
+	defer pc1.Close()
 
 	pc2, err := webrtc.NewPeerConnection(config)
 	if err != nil {
 		t.Fatal("Failed to create webrtc PeerConnection:", err)
 	}
+	defer pc2.Close()
 
 	sig1, sig2 := negotiation.DummySignalersPipeline(
 		&negotiation.DummySignalerInterceptor{
@@ -47,11 +49,11 @@ func Test_BasicNegotiation(t *testing.T) {
 			},
 		},
 	)
+	defer sig1.Close()
+	defer sig2.Close()
 
 	neg1 := negotiation.NewRegisteredNegotiator(pc1, sig1, negotiation.Polite)
-	defer neg1.Close()
 	neg2 := negotiation.NewRegisteredNegotiator(pc2, sig2)
-	defer neg2.Close()
 
 	testBuffer := []byte("A buffer for test")
 
@@ -111,11 +113,13 @@ func Test_BasicNegotiationWithNetworkLatency(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to create webrtc PeerConnection:", err)
 	}
+	defer pc1.Close()
 
 	pc2, err := webrtc.NewPeerConnection(config)
 	if err != nil {
 		t.Fatal("Failed to create webrtc PeerConnection:", err)
 	}
+	defer pc2.Close()
 
 	randomLatency := func() time.Duration {
 		const (
@@ -151,11 +155,11 @@ func Test_BasicNegotiationWithNetworkLatency(t *testing.T) {
 			},
 		},
 	)
+	defer sig1.Close()
+	defer sig2.Close()
 
 	neg1 := negotiation.NewRegisteredNegotiator(pc1, sig1, negotiation.Polite)
-	defer neg1.Close()
 	neg2 := negotiation.NewRegisteredNegotiator(pc2, sig2)
-	defer neg2.Close()
 
 	testBuffer := []byte("A buffer for test")
 
@@ -211,11 +215,13 @@ func Test_MultipleDataTracksNegotiation(t *testing.T) {
 	if err != nil {
 		t.Fatal("Failed to create webrtc PeerConnection:", err)
 	}
+	defer pc1.Close()
 
 	pc2, err := webrtc.NewPeerConnection(config)
 	if err != nil {
 		t.Fatal("Failed to create webrtc PeerConnection:", err)
 	}
+	defer pc2.Close()
 
 	sig1, sig2 := negotiation.DummySignalersPipeline(
 		&negotiation.DummySignalerInterceptor{
@@ -239,11 +245,11 @@ func Test_MultipleDataTracksNegotiation(t *testing.T) {
 			},
 		},
 	)
+	defer sig1.Close()
+	defer sig2.Close()
 
 	neg1 := negotiation.NewRegisteredNegotiator(pc1, sig1, negotiation.Polite)
-	defer neg1.Close()
 	neg2 := negotiation.NewRegisteredNegotiator(pc2, sig2)
-	defer neg2.Close()
 
 	fg := utils.FailGroup()
 

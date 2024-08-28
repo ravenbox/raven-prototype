@@ -3,8 +3,6 @@
 package negotiation
 
 import (
-	"errors"
-
 	"github.com/ravenbox/raven-prototype/pkg/utils"
 
 	"github.com/pion/webrtc/v4"
@@ -15,14 +13,13 @@ type Negotiator struct {
 	PeerConn *webrtc.PeerConnection
 	Signaler Signaler
 	Polite   bool
-	OnError  func(error) (ignore bool)
+	OnError  func(error)
 
 	makingOffer                  bool
 	ignoreOffer                  bool
 	isSettingRemoteAnswerPending bool
 
 	registered bool
-	closed     bool
 	mu         utils.Mutex
 }
 
@@ -32,7 +29,7 @@ var (
 	Polite negotiatorOption = func(n *Negotiator) {
 		n.Polite = true
 	}
-	OnError = func(fn func(error) bool) negotiatorOption {
+	OnError = func(fn func(error)) negotiatorOption {
 		return func(n *Negotiator) {
 			n.OnError = fn
 		}
@@ -74,20 +71,6 @@ func (n *Negotiator) Register() {
 	n.PeerConn.OnNegotiationNeeded(n.onNegotiationNeeded)
 	n.Signaler.OnMessage(n.onMessage)
 	n.Signaler.OnError(n.onSignalerError)
-}
-
-func (n *Negotiator) Close() error {
-	if n.closed {
-		return errors.New("already closed")
-	}
-	if err := errors.Join(
-		n.PeerConn.Close(),
-		n.Signaler.Close(),
-	); err != nil {
-		return err
-	}
-	n.closed = true
-	return nil
 }
 
 func (n *Negotiator) onICECandidate(c *webrtc.ICECandidate) {
@@ -188,9 +171,6 @@ func (n *Negotiator) handleError(err error) {
 		return
 	}
 	if n.OnError != nil {
-		if ignore := n.OnError(err); ignore {
-			return
-		}
+		n.OnError(err)
 	}
-	n.Close()
 }
