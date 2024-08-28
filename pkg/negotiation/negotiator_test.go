@@ -1,6 +1,7 @@
 package negotiation_test
 
 import (
+	"fmt"
 	"math/rand"
 	"slices"
 	"testing"
@@ -244,25 +245,48 @@ func Test_MultipleDataTracksNegotiation(t *testing.T) {
 	neg2 := negotiation.NewRegisteredNegotiator(pc2, sig2)
 	defer neg2.Close()
 
-	ordered := false
+	fg := utils.FailGroup()
+
+	ordered := true
 	maxRetransmits := uint16(0)
-	type result struct{}
-	tt := []struct {
+	tt := map[uint16]struct {
 		testBuffer           []byte
 		waitBeforeNextCreate time.Duration
-	}{}
+		recvCh               chan []byte
+	}{
+		1000: {testBuffer: []byte("sample buffer for test case 1"), waitBeforeNextCreate: 150 * time.Millisecond},
+		1001: {testBuffer: []byte("sample buffer for test case 2"), waitBeforeNextCreate: 200 * time.Millisecond},
+		1002: {testBuffer: []byte("sample buffer for test case 3")},
+	}
+	for k, v := range tt {
+		v.recvCh = make(chan []byte, 1)
+		tt[k] = v
+	}
 
-	fg := utils.FailGroup()
-	for idx, tc := range tt {
+	neg2.PeerConn.OnDataChannel(func(dc *webrtc.DataChannel) {
+		// Register the OnMessage to handle incoming messages
+		dc.OnMessage(func(dcMsg webrtc.DataChannelMessage) {
+			id := dc.ID()
+			if id == nil {
+				t.Log("received message on data channel with empty id. ignored.")
+				return
+			}
+			tt[*id].recvCh <- dcMsg.Data
+		})
+	})
+
+	for id, tc := range tt {
 		// Copy tc for closure captures
-		idx := idx
+		id := id
 		tc := tc
 
 		options := &webrtc.DataChannelInit{
+			ID:             &id,
 			Ordered:        &ordered,
 			MaxRetransmits: &maxRetransmits,
 		}
-		dc, err := neg1.PeerConn.CreateDataChannel("data", options)
+		label := fmt.Sprintf("data-%d", id)
+		dc, err := neg1.PeerConn.CreateDataChannel(label, options)
 		if err != nil {
 			t.Fatal("Could not create data channel:", err)
 		}
@@ -277,31 +301,28 @@ func Test_MultipleDataTracksNegotiation(t *testing.T) {
 			})
 		})
 
-		recvCh := make(chan []byte)
-		neg2.PeerConn.OnDataChannel(func(dc *webrtc.DataChannel) {
-			// Register the OnMessage to handle incoming messages
-			dc.OnMessage(func(dcMsg webrtc.DataChannelMessage) {
-				recvCh <- dcMsg.Data
-			})
-		})
 		// Check data arrival after creating data channel with
 		// a specified timeout.
 		fg.Check(func(fail, done func()) {
 			go func() {
 				defer done()
-				const timeout = 250 * time.Millisecond
+				const timeout = 1 * time.Second
 				select {
-				case recvBuffer := <-recvCh:
+				case recvBuffer := <-tc.recvCh:
 					if !slices.Equal(recvBuffer, tc.testBuffer) {
 						t.Log("received data but incorrect")
 						fail()
 					}
 				case <-time.After(timeout):
-					t.Log("receive timeout on test case", idx)
+					t.Log("receive timeout on test case", id)
 					fail()
 				}
 			}()
 		})
+
+		if d := tc.waitBeforeNextCreate; d > 0 {
+			<-time.After(tc.waitBeforeNextCreate)
+		}
 	}
 
 	const timeout = 10 * time.Second
