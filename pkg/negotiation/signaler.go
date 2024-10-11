@@ -163,3 +163,67 @@ func (d *dummySignalerPipelineEndpoint) Close() error {
 	close(d.closed)
 	return nil
 }
+
+type SignalerCallbacks struct {
+	onMessageCallback func(SignalBody)
+	onErrorCallback   func(error)
+}
+
+func (s *SignalerCallbacks) OnMessage(callback func(SignalBody)) {
+	s.onMessageCallback = callback
+}
+
+func (s *SignalerCallbacks) OnError(callback func(error)) {
+	s.onErrorCallback = callback
+}
+
+type ChanSignaler interface {
+	Signaler
+	CallOnMessage(SignalBody)
+	CallOnError(error)
+}
+
+type chanSignaler[T any] struct {
+	SignalerCallbacks
+	SignalChan  chan T
+	transformer func(SignalBody) T
+}
+
+var _ Signaler = (*chanSignaler[struct{}])(nil)
+var _ ChanSignaler = (*chanSignaler[struct{}])(nil)
+
+func NewChanSignaler[T any](ch chan T, transformer func(SignalBody) T) ChanSignaler {
+	if ch == nil {
+		panic("ch must not be nil")
+	}
+	if transformer == nil {
+		panic("transformer callback must not be nil")
+	}
+	return &chanSignaler[T]{
+		SignalerCallbacks: SignalerCallbacks{},
+		SignalChan:        ch,
+		transformer:       transformer,
+	}
+}
+
+func (s *chanSignaler[T]) Send(body SignalBody) error {
+	s.SignalChan <- s.transformer(body)
+	return nil
+}
+
+func (s *chanSignaler[T]) Close() error {
+	close(s.SignalChan)
+	return nil
+}
+
+func (s *chanSignaler[T]) CallOnMessage(body SignalBody) {
+	if s.onMessageCallback != nil {
+		s.onMessageCallback(body)
+	}
+}
+
+func (s *chanSignaler[T]) CallOnError(err error) {
+	if s.onErrorCallback != nil {
+		s.onErrorCallback(err)
+	}
+}

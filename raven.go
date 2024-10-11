@@ -85,7 +85,7 @@ type user struct {
 
 	webrtc     *webrtc.PeerConnection
 	negotiator *negotiation.Negotiator
-	signaler   *userSignaler
+	signaler   negotiation.ChanSignaler
 }
 
 func (u *user) readWs() {
@@ -154,9 +154,10 @@ func (u *user) wsCreateWebRTCPeer(_ msgCreateWebRTCPeer) {
 		u.webrtc = pc
 	}
 	if u.signaler == nil {
-		u.signaler = &userSignaler{
-			sendChan: u.wsSendCh,
-		}
+		u.signaler = negotiation.NewChanSignaler(u.wsSendCh,
+			func(sb negotiation.SignalBody) WebsocketMessagePayload {
+				return msgSignal(sb)
+			})
 	}
 	if u.negotiator == nil {
 		neg := negotiation.NewRegisteredNegotiator(
@@ -171,47 +172,5 @@ func (msgSignal) MessageType() string { return "signal" }
 
 func (u *user) wsGetSignal(msg msgSignal) {
 	body := negotiation.SignalBody(msg)
-	u.signaler.callOnMessage(body)
-}
-
-type userSignaler struct {
-	sendChan chan WebsocketMessagePayload
-
-	// these fields will be set by negotiator
-	onMessageCallback func(negotiation.SignalBody)
-	onErrorCallback   func(error)
-}
-
-var _ negotiation.Signaler = (*userSignaler)(nil)
-
-func (s *userSignaler) Send(body negotiation.SignalBody) error {
-	if s.sendChan == nil {
-		return nil
-	}
-	s.sendChan <- msgSignal(body)
-	return nil
-}
-
-func (s *userSignaler) OnMessage(fn func(negotiation.SignalBody)) {
-	s.onMessageCallback = fn
-}
-
-func (s *userSignaler) OnError(fn func(error)) {
-	s.onErrorCallback = fn
-}
-
-func (s *userSignaler) Close() error {
-	panic("not implemented")
-}
-
-func (s *userSignaler) callOnMessage(body negotiation.SignalBody) {
-	if s.onMessageCallback != nil {
-		s.onMessageCallback(body)
-	}
-}
-
-func (s *userSignaler) callOnError(err error) {
-	if s.onErrorCallback != nil {
-		s.onErrorCallback(err)
-	}
+	u.signaler.CallOnMessage(body)
 }
