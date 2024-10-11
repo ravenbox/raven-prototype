@@ -1,6 +1,7 @@
 package raven
 
 import (
+	"bytes"
 	"encoding/json"
 )
 
@@ -9,11 +10,22 @@ type WebsocketMessage struct {
 	Payload json.RawMessage `json:"payload"`
 }
 
-type WebsocketMessageType interface {
+func EncodeWebsocketMessage(payload WebsocketMessagePayload) (WebsocketMessage, error) {
+	buf := new(bytes.Buffer)
+	if err := json.NewEncoder(buf).Encode(payload); err != nil {
+		return WebsocketMessage{"", nil}, err
+	}
+	return WebsocketMessage{
+		Type:    payload.MessageType(),
+		Payload: nil,
+	}, nil
+}
+
+type WebsocketMessagePayload interface {
 	MessageType() string
 }
 
-func Match[T WebsocketMessageType](m WebsocketMessage, fn func(T)) error {
+func Match[T WebsocketMessagePayload](m WebsocketMessage, fn func(T)) error {
 	t := *new(T)
 	if m.Type != t.MessageType() {
 		return nil

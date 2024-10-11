@@ -59,7 +59,7 @@ func (ra *Raven) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Println("Error upgrading http to ws:", err)
 		return
 	}
-	sendCh := make(chan WebsocketMessageType, 32)
+	sendCh := make(chan WebsocketMessagePayload, 32)
 	u := &user{
 		ws:       conn,
 		wsSendCh: sendCh,
@@ -69,12 +69,12 @@ func (ra *Raven) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ra.mu.Unlock()
 
 	go u.readWs()
-	go u.writeWs(sendCh)
+	go u.writeWs()
 }
 
 type user struct {
 	ws       *websocket.Conn
-	wsSendCh chan<- WebsocketMessageType
+	wsSendCh chan WebsocketMessagePayload
 
 	webrtc     *webrtc.PeerConnection
 	negotiator *negotiation.Negotiator
@@ -105,17 +105,15 @@ func (u *user) readWs() {
 	}
 }
 
-func (u *user) writeWs(readFrom chan WebsocketMessageType) {
+func (u *user) writeWs() {
+	readFrom := u.wsSendCh
 	for msg := range readFrom {
-		payload, err := json.Marshal(msg)
+		wsMsg, err := EncodeWebsocketMessage(msg)
 		if err != nil {
 			log.Println("error:", err)
 			continue
 		}
-		err = u.ws.WriteJSON(WebsocketMessage{
-			Type:    msg.MessageType(),
-			Payload: payload,
-		})
+		err = u.ws.WriteJSON(wsMsg)
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Println("error:", err)
@@ -127,6 +125,9 @@ func (u *user) writeWs(readFrom chan WebsocketMessageType) {
 
 func (u *user) route(msg WebsocketMessage) error {
 	if err := Match(msg, u.wsCreateWebRTCPeer); err != nil {
+		return err
+	}
+	if err := Match(msg, u.wsGetSignal); err != nil {
 		return err
 	}
 	return nil
@@ -146,7 +147,9 @@ func (u *user) wsCreateWebRTCPeer(_ msgCreateWebRTCPeer) {
 		u.webrtc = pc
 	}
 	if u.signaler == nil {
-		u.signaler = &userSignaler{}
+		u.signaler = &userSignaler{
+			sendChan: u.wsSendCh,
+		}
 	}
 	if u.negotiator == nil {
 		neg := negotiation.NewRegisteredNegotiator(
@@ -165,7 +168,9 @@ func (u *user) wsGetSignal(msg msgSignal) {
 }
 
 type userSignaler struct {
-	sendChan          chan<- negotiation.SignalBody
+	sendChan chan WebsocketMessagePayload
+
+	// these fields will be set by negotiator
 	onMessageCallback func(negotiation.SignalBody)
 	onErrorCallback   func(error)
 }
@@ -173,7 +178,10 @@ type userSignaler struct {
 var _ negotiation.Signaler = (*userSignaler)(nil)
 
 func (s *userSignaler) Send(body negotiation.SignalBody) error {
-	s.sendChan <- body
+	if s.sendChan == nil {
+		return nil
+	}
+	s.sendChan <- msgSignal(body)
 	return nil
 }
 
