@@ -40,6 +40,13 @@ type Raven struct {
 	mu    sync.Mutex
 }
 
+func NewRaven(sfu *sfu.SFU) *Raven {
+	return &Raven{
+		SFU:   sfu,
+		users: make(map[string]*user),
+	}
+}
+
 type UserRegisterRequest struct {
 	Name string `json:"name"`
 }
